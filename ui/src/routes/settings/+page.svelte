@@ -976,6 +976,28 @@
                     bind:value={$extraSettings.values['dsTemp_offset']}/>
             </label>
         </p>
+        <h4>ENVIV - Barometric Pressure + Temperature Sensor:</h4>
+        <p>
+            <label>
+                I2C Bus:<br />
+                <input
+                    type="number"
+                    step="1"
+                    min="1"
+                    max="2"
+                    name="ENVIVBMP280_I2c_Bus"
+                    placeholder="1"
+                    bind:value={$extras.ENVIVBMP280_I2c_Bus}/>
+            </label>
+        </p>
+        <p>
+            <label>
+                I2C address (0x76 or 0x77):<br />
+                <input
+                    name="ENVIVBMP280_I2c"
+                    bind:value={$extras.ENVIVBMP280_I2c}/>
+            </label>
+        </p>
         <div class="flex justify-end">
             <button type="submit" class="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:ring-4 focus:outline-none focus:ring-blue-300 rounded-lg dark:bg-blue-500 dark:hover:bg-blue-600 dark:focus:ring-blue-800">
                 {s ? "Saving..." : "Save"}
