@@ -1,4 +1,4 @@
-#include "BMP280m5.h"
+#include "m5env/BMP280m5.h"
 
 bool BMP280m5::begin(TwoWire* wire, uint8_t addr, uint8_t sda, uint8_t scl,
                    long freq) {
