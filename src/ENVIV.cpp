@@ -6,12 +6,13 @@
 #include <HeadlessWiFiSettings.h>
 #include "string_utils.h"
 
-#include <M5UnitENV.h>
+#include "M5UnitENV.h"
+//#include <M5UnitENV.h>
 //#include <M5UnitUnifiedENV.h>
 
 namespace ENVIV
 {
-    BMP280 bmp;
+    BMP280m5 bmp;
     SHT4X sht;
     String ENVIVBMP280_I2c;
     int ENVIVBMP280_I2c_Bus;  
@@ -25,7 +26,7 @@ namespace ENVIV
         if (!I2C_Bus_1_Started && !I2C_Bus_2_Started) return;
         //Serial.println("bus check complete");
 
-        if (!bmp.begin(&Wire, BMP280_I2C_ADDR, 2, 1, 400000U)) {
+        if (!bmp.begin(&Wire, BMP280m5_I2C_ADDR, 2, 1, 400000U)) {
             Serial.println("[ENVIV BMP280] Couldn't find a sensor, check your wiring and I2C address!");
             initialized = false;
         } else {
@@ -33,11 +34,11 @@ namespace ENVIV
         }
 
         /* Default settings from datasheet. */
-        bmp.setSampling(BMP280::MODE_NORMAL,     /* Operating Mode. */
-                        BMP280::SAMPLING_X2,     /* Temp. oversampling */
-                        BMP280::SAMPLING_X16,    /* Pressure oversampling */
-                        BMP280::FILTER_X16,      /* Filtering. */
-                        BMP280::STANDBY_MS_500); /* Standby time. */
+        bmp.setSampling(BMP280m5::MODE_NORMAL,     /* Operating Mode. */
+                        BMP280m5::SAMPLING_X2,     /* Temp. oversampling */
+                        BMP280m5::SAMPLING_X16,    /* Pressure oversampling */
+                        BMP280m5::FILTER_X16,      /* Filtering. */
+                        BMP280m5::STANDBY_MS_500); /* Standby time. */
 
         if (!sht.begin(&Wire, SHT40_I2C_ADDR_44, 2, 1, 400000U)) {
             Serial.println("[ENVIV SHT40]  Couldn't find SHT40, check your wiring and I2C address!");
