@@ -1,4 +1,4 @@
-#include "SHT4X.h"
+#include "m5env/SHT4X.h"
 
 bool SHT4X::begin(TwoWire* wire, uint8_t addr, uint8_t sda, uint8_t scl,
                   long freq) {
