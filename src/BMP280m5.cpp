@@ -87,7 +87,7 @@ float BMP280m5::readAltitude(float seaLevelhPa) {
     return altitude;
 }
 
-void BMP280::setSampling(sensor_mode mode, sensor_sampling tempSampling,
+void BMP280m5::setSampling(sensor_mode mode, sensor_sampling tempSampling,
                          sensor_sampling pressSampling, sensor_filter filter,
                          standby_duration duration) {
     _measReg.mode   = mode;
