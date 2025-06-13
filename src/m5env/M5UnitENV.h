@@ -9,8 +9,8 @@
 //#include "DHT12.h"
 //#include "QMP6988.h"
 //#include "SHT3X.h"
-#include "SHT4X.h"
-#include "BMP280.h"
+#include "m5env/SHT4X.h"
+#include "m5env/BMP280.h"
 //#include "SCD4X.h"
 
 #endif
