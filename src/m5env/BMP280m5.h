@@ -29,7 +29,7 @@ enum {
     BMP280m5_REGISTER_CONTROL      = 0xF4,
     BMP280m5_REGISTER_CONFIG       = 0xF5,
     BMP280m5_REGISTER_PRESSUREDATA = 0xF7,
-    BMP280_REGISTER_TEMPDATA     = 0xFA,
+    BMP280m5_REGISTER_TEMPDATA     = 0xFA,
 };
 
 typedef struct {
@@ -46,9 +46,9 @@ typedef struct {
     int16_t dig_P7;  /**< dig_P7 cal register. */
     int16_t dig_P8;  /**< dig_P8 cal register. */
     int16_t dig_P9;  /**< dig_P9 cal register. */
-} bmp280_calib_data;
+} bmp280m5_calib_data;
 
-class BMP280 {
+class BMP280m5 {
    public:
     /** Oversampling rate for the sensor. */
     enum sensor_sampling {
