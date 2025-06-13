@@ -4,7 +4,7 @@
 
 #include "Arduino.h"
 #include "Wire.h"
-#include "m5env/I2C_Class.h"
+#include "I2C_Class.h"
 
 #define BMP280m5_I2C_ADDR 0x76
 
