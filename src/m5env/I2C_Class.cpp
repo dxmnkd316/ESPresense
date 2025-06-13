@@ -1,4 +1,4 @@
-#include "I2C_Class.h"
+#include "m5env/I2C_Class.h"
 
 void I2C_Class::begin(TwoWire *wire, uint8_t sda, uint8_t scl, long freq) {
     _wire = wire;
