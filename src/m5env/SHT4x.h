@@ -2,7 +2,7 @@
 #define __SHT4X_H_
 
 #include "Arduino.h"
-#include "I2C_Class.h"
+#include "m5env/I2C_Class.h"
 #include "Wire.h"
 #include "utility.h"
 
