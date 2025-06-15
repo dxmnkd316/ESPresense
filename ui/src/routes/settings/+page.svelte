@@ -976,10 +976,10 @@
                     bind:value={$extraSettings.values['dsTemp_offset']}/>
             </label>
         </p>
-        <h4>ENVIV - Barometric Pressure + Temperature Sensor:</h4>
+        <h4>ENVIV - Barometric Pressure + Temperature Sensor: </h4>
         <p>
             <label>
-                I2C Bus:<br />
+                I2C Bus: <br />
                 <input
                     type="number"
                     step="1"
