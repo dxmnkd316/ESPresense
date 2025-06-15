@@ -986,8 +986,8 @@
                     min="1"
                     max="2"
                     name="ENVIVBMP280_I2c_Bus"
-                    placeholder="1"
-                    bind:value={$extraSettings.defaults['ENVIVBMP280_I2c_Bus']}/>
+                    placeholder={$extraSettings.defaults['ENVIVBMP280_I2c_Bus']}
+                    bind:value={$extraSettings.values['ENVIVBMP280_I2c_Bus']}/>
             </label>
         </p>
         <p>
@@ -995,7 +995,8 @@
                 I2C address (0x76 or 0x77):<br />
                 <input
                     name="ENVIVBMP280_I2c"
-                    bind:value={$extraSettings.defaults['ENVIVBMP280_I2c']}/>
+                    placeholder={$extraSettings.defaults['ENVIVBMP280_I2c']}
+                    bind:value={$extraSettings.values['ENVIVBMP280_I2c']}/>
             </label>
         </p>
         <div class="flex justify-end">
