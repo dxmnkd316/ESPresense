@@ -17,6 +17,14 @@ jobs:
       contents: write
       pull-requests: write
     steps:
+    - name: Debug repository context
+      run: |
+        echo "github.repository = ${{ github.repository }}"
+        echo "head repo (PR only) = ${{ github.event.pull_request.head.repo.full_name }}"
+        echo "ref = ${{ github.ref }}"
+        echo "ref_name = ${{ github.ref_name }}"
+        echo "head_ref = ${{ github.head_ref }}"
+
     - name: Checkout code
       uses: actions/checkout@v4
       with:
