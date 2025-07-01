@@ -12,11 +12,11 @@ jobs:
       uses: peter-evans/repository-dispatch@v3
       with:
         token: ${{ secrets.ESPRESENSE_CONTENTS_TOKEN }}
-        repository: ESPresense/ESPresense.github.io
+        repository: dxmnkd316/ESPresense.github.io
         event-type: new-release
         client-payload: >
           {
-            "repository": "ESPresense/ESPresense",
+            "repository": "dxmnkd316/ESPresense",
             "ref": "${{ github.ref }}",
             "sha": "${{ github.sha }}"
           }
