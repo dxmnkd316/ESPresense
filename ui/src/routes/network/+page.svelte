@@ -126,6 +126,7 @@
                     </div>
                     <ul class="divide-y divide-gray-200 dark:divide-gray-700">
                         {#each Object.entries(wifiNetworks) as [ssid, rssi]}
+
                             <li>
                                 <button
                                     type="button"

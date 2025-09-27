@@ -6,6 +6,7 @@
 #include <ESPAsyncWebServer.h>
 #include <Arduino.h>
 
+
 // app/immutable/nodes/0.CSXwBH0Q.js
 const uint16_t APP_IMMUTABLE_NODES_0_CSXWBH0Q_JS_L = 93;
 const uint8_t APP_IMMUTABLE_NODES_0_CSXWBH0Q_JS[] PROGMEM = {
@@ -76,6 +77,7 @@ const uint8_t APP_IMMUTABLE_NODES_4_CXKL9AOW_JS[] PROGMEM = {
   0x78, 0x70, 0x6f, 0x72, 0x74, 0x7b, 0x6d, 0x20, 0x61, 0x73, 0x20, 0x63, 0x6f, 0x6d, 0x70, 0x6f,
   0x6e, 0x65, 0x6e, 0x74, 0x7d, 0x3b, 0x0a
 };
+
 
 inline void serveAppImmutableNodes_4Cxkl9AoWJs(AsyncWebServerRequest* request) {
   AsyncWebServerResponse *response = request->beginResponse_P(200, "application/javascript", APP_IMMUTABLE_NODES_4_CXKL9AOW_JS, APP_IMMUTABLE_NODES_4_CXKL9AOW_JS_L);

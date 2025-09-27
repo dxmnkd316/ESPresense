@@ -2,11 +2,14 @@
  * Web UI Routes
  *
  * Compressed Size Summary:
+
  * ui_app_immutable_assets_css: 10,361 bytes
  * ui_html: 3,255 bytes
  * ui_app_immutable_entry_js: 48,506 bytes
  * ui_app_immutable_nodes_js: 514 bytes
+ * ui_html: 3,245 bytes
  * ui_svg: 456 bytes
+
  * Total: 63,092 bytes
  */
 
@@ -14,9 +17,9 @@
 
 #include <ESPAsyncWebServer.h>
 #include "ui_app_immutable_assets_css.h"
-#include "ui_html.h"
 #include "ui_app_immutable_entry_js.h"
 #include "ui_app_immutable_nodes_js.h"
+#include "ui_html.h"
 #include "ui_svg.h"
 
 inline void setupRoutes(AsyncWebServer* server) {
