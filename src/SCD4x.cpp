@@ -1,5 +1,5 @@
 #ifdef SENSORS
-#include "SCD41m5.h"
+#include "SCD4x.h"
 #include "globals.h"
 #include "mqtt.h"
 #include "defaults.h"
@@ -10,9 +10,9 @@
 //#include <M5UnitENV.h>
 //#include <M5UnitUnifiedENV.h>
 
-namespace SCD41m5
+namespace SCD4x
 {
-    SCD41m5 scd;
+    SCD4x scd;
     long SCD4x_status;
     String SCD4x_I2c;
     int SCD4x_I2c_Bus;
@@ -33,9 +33,9 @@ namespace SCD41m5
 //    bool initializedsht = false;
 
     void Setup() {
-        //Serial.println("starting env IV setup");
+        Serial.println("starting scd41 setup");
         if (!I2C_Bus_1_Started && !I2C_Bus_2_Started) return;
-        //Serial.println("bus check complete");
+        Serial.println("bus check complete");
 
         scd = new I2cScd4x();
         if (SCD4x_I2c == "0x62") {
@@ -44,13 +44,25 @@ namespace SCD41m5
             return;
         }
 
-
-        if (!bmp.begin(&Wire, BMP280m5_I2C_ADDR, 2, 1, 400000U)) {
-            Serial.println("[SCD41m5 SCD41] Couldn't find a sensor, check your wiring and I2C address!");
-            initialized = false;
-        } else {
-            initialized = true;
+        if (!scd4x.begin(&Wire, SCD4X_I2C_ADDR, 2, 1, 400000U)) {
+            Serial.println("Couldn't find SCD4X");
+            while (1) delay(1);
         }
+
+
+
+
+
+
+
+
+        
+//        if (!bmp.begin(&Wire, BMP280m5_I2C_ADDR, 2, 1, 400000U)) {
+//            Serial.println("[SCD41m5 SCD41] Couldn't find a sensor, check your wiring and I2C address!");
+//            initialized = false;
+//        } else {
+//            initialized = true;
+//        }
 
         /* Default settings from datasheet. */
         bmp.setSampling(BMP280m5::MODE_NORMAL,     /* Operating Mode. */
