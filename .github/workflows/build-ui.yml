@@ -17,16 +17,7 @@ jobs:
       contents: write
       pull-requests: write
     steps:
-    - name: Debug repository context
-      run: |
-        echo "github.repository = ${{ github.repository }}"
-        echo "head repo (PR only) = ${{ github.event.pull_request.head.repo.full_name }}"
-        echo "ref = ${{ github.ref }}"
-        echo "ref_name = ${{ github.ref_name }}"
-        echo "head_ref = ${{ github.head_ref }}"
-
-    - name: Checkout code
-      uses: actions/checkout@v4
+    - uses: actions/checkout@v5
       with:
         ref: ${{ github.head_ref || github.ref_name }}
         repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
@@ -36,7 +27,7 @@ jobs:
       run: git remote set-url origin https://github.com/${{ github.repository }}.git
 
     - name: Setup Node.js
-      uses: actions/setup-node@v4
+      uses: actions/setup-node@v5
       with:
         node-version: '18'
         cache: 'npm'
@@ -44,7 +35,15 @@ jobs:
 
     - name: Install Dependencies
       working-directory: ui
-      run: npm ci
+      run: npm install
+
+    - name: Install Playwright browsers
+      working-directory: ui
+      run: npx playwright install --with-deps chromium
+
+    - name: Run UI tests
+      working-directory: ui
+      run: npm test -- --reporter=list
 
     - name: Build UI
       working-directory: ui
