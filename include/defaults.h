@@ -23,6 +23,8 @@
 #define BLE_SCAN_INTERVAL 0x80
 #define BLE_SCAN_WINDOW 0x80
 
+#define MAX_TIME_SLOTS 64
+
 // Define the base topic for room detection. Usually "espresense"
 #define CHANNEL "espresense"
 
@@ -56,19 +58,32 @@
 
 #define DEFAULT_RX_REF_RSSI (-65)
 #define DEFAULT_TX_REF_RSSI (-59)
-#define DEFAULT_ABSORPTION (3.5)
-#define DEFAULT_RX_ADJ_RSSI 0
+#define DEFAULT_ABSORPTION (2.7)
 
-#define DEFAULT_FORGET_MS 150000 // Ms to remove fingerprint after not seeing it
+#define DEFAULT_FORGET_MS 150000  // Ms to remove fingerprint after not seeing it
 #define DEFAULT_SKIP_DISTANCE 0.5 // If beacon has moved less than this skip update
-#define DEFAULT_SKIP_MS 5000 // Ms to skip mqtt update if no movement
+#define DEFAULT_SKIP_MS 5000      // Ms to skip mqtt update if no movement
+#define DEFAULT_MAX_DIVISOR 10    // Max times to divide the skip update interval for large movements
 
 #define DEFAULT_COUNT_ENTER 2.0f
 #define DEFAULT_COUNT_EXIT 4.0f
 #define DEFAULT_COUNT_MS 10000
 #define DEFAULT_COUNT_IDS ""
 
-
+// RX_ADJ_RSSI Defaults
+#ifdef M5STICK
+#define DEFAULT_RX_ADJ_RSSI 0
+#else
+#ifdef M5ATOM
+#define DEFAULT_RX_ADJ_RSSI 0
+#else
+#ifdef ESP32S3
+#define DEFAULT_RX_ADJ_RSSI 20
+#else
+#define DEFAULT_RX_ADJ_RSSI 0
+#endif
+#endif
+#endif
 
 // I2C Defaults
 #ifdef M5STICK

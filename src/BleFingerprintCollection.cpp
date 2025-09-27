@@ -1,9 +1,11 @@
 #include "BleFingerprintCollection.h"
 
 #include "defaults.h"
+#include "mqtt.h"
 #include <Arduino.h>
+#include <algorithm>
 #include <sstream>
-#include <AsyncWiFiSettings.h>
+#include <HeadlessWiFiSettings.h>
 
 namespace BleFingerprintCollection {
 // Public (externed)
@@ -20,7 +22,8 @@ float skipDistance = DEFAULT_SKIP_DISTANCE,
       countExit = DEFAULT_COUNT_EXIT;
 int8_t rxRefRssi = DEFAULT_RX_REF_RSSI,
        rxAdjRssi = DEFAULT_RX_ADJ_RSSI,
-       txRefRssi = DEFAULT_TX_REF_RSSI;
+       txRefRssi = DEFAULT_TX_REF_RSSI,
+       maxDivisor = DEFAULT_MAX_DIVISOR;
 int forgetMs = DEFAULT_FORGET_MS,
     skipMs = DEFAULT_SKIP_MS,
     countMs = DEFAULT_COUNT_MS,
@@ -78,20 +81,64 @@ bool addOrReplace(DeviceConfig config) {
     if (xSemaphoreTake(deviceConfigMutex, MAX_WAIT) != pdTRUE)
         log_e("Couldn't take deviceConfigMutex in addOrReplace!");
 
+    std::vector<String> idsToDelete;
+    bool isReplacement = false;
+
+    if (!config.alias.isEmpty()) {
+        for (auto it = deviceConfigs.begin(); it != deviceConfigs.end();) {
+            if (it->alias == config.alias && it->id != config.id) {
+                idsToDelete.push_back(it->id);
+                it = deviceConfigs.erase(it);
+            } else {
+                ++it;
+            }
+        }
+    }
+
     for (auto &it : deviceConfigs) {
         if (it.id == config.id) {
             it = config;
-            xSemaphoreGive(deviceConfigMutex);
-            return false;
+            isReplacement = true;
+            break;
         }
     }
-    deviceConfigs.push_back(config);
+    
+    if (!isReplacement) {
+        deviceConfigs.push_back(config);
+    }
+    
     xSemaphoreGive(deviceConfigMutex);
-    return true;
+    
+    // Call deleteConfig outside the critical section to avoid mutex re-entrance
+    for (const String &id : idsToDelete) {
+        deleteConfig(id);
+    }
+    
+    return !isReplacement;
+}
+
+bool removeConfig(const String &id) {
+    if (xSemaphoreTake(deviceConfigMutex, MAX_WAIT) != pdTRUE) {
+        log_e("Couldn't take deviceConfigMutex in removeConfig!");
+        return false;
+    }
+
+    auto it = std::remove_if(deviceConfigs.begin(), deviceConfigs.end(),
+        [&id](const DeviceConfig &config) { return config.id == id; });
+
+    bool removed = it != deviceConfigs.end();
+    deviceConfigs.erase(it, deviceConfigs.end());
+
+    xSemaphoreGive(deviceConfigMutex);
+    return removed;
 }
 
 bool Config(String &id, String &json) {
-    DynamicJsonDocument doc(1024);
+    if (json.isEmpty()) {
+        return removeConfig(id);
+    }
+
+    DynamicJsonDocument doc(512);
     deserializeJson(doc, json);
 
     DeviceConfig config = {};
@@ -132,28 +179,29 @@ bool Config(String &id, String &json) {
 }
 
 void ConnectToWifi() {
-    knownMacs = AsyncWiFiSettings.string("known_macs", DEFAULT_KNOWN_MACS, "Known BLE mac addresses (no colons, space seperated)");
-    knownIrks = AsyncWiFiSettings.string("known_irks", DEFAULT_KNOWN_IRKS, "Known BLE identity resolving keys, should be 32 hex chars space seperated");
+    knownMacs = HeadlessWiFiSettings.string("known_macs", DEFAULT_KNOWN_MACS, "Known BLE mac addresses (no colons, space seperated)");
+    knownIrks = HeadlessWiFiSettings.string("known_irks", DEFAULT_KNOWN_IRKS, "Known BLE identity resolving keys, should be 32 hex chars space seperated");
 
-    query = AsyncWiFiSettings.string("query", DEFAULT_QUERY, "Query device ids for characteristics (eg. flora:)");
-    requeryMs = AsyncWiFiSettings.integer("requery_ms", 30, 3600, DEFAULT_REQUERY_MS / 1000, "Requery interval in seconds") * 1000;
+    query = HeadlessWiFiSettings.string("query", DEFAULT_QUERY, "Query device ids for characteristics (eg. flora:)");
+    requeryMs = HeadlessWiFiSettings.integer("requery_ms", 30, 3600, DEFAULT_REQUERY_MS / 1000, "Requery interval in seconds") * 1000;
 
-    countIds = AsyncWiFiSettings.string("count_ids", DEFAULT_COUNT_IDS, "Include id prefixes (space seperated)");
-    countEnter = AsyncWiFiSettings.floating("count_enter", 0, 100, DEFAULT_COUNT_ENTER, "Start counting devices less than distance (in meters)");
-    countExit = AsyncWiFiSettings.floating("count_exit", 0, 100, DEFAULT_COUNT_EXIT, "Stop counting devices greater than distance (in meters)");
-    countMs = AsyncWiFiSettings.integer("count_ms", 0, 3000000, DEFAULT_COUNT_MS, "Include devices with age less than (in ms)");
+    countIds = HeadlessWiFiSettings.string("count_ids", DEFAULT_COUNT_IDS, "Include id prefixes (space seperated)");
+    countEnter = HeadlessWiFiSettings.floating("count_enter", 0, 100, DEFAULT_COUNT_ENTER, "Start counting devices less than distance (in meters)");
+    countExit = HeadlessWiFiSettings.floating("count_exit", 0, 100, DEFAULT_COUNT_EXIT, "Stop counting devices greater than distance (in meters)");
+    countMs = HeadlessWiFiSettings.integer("count_ms", 0, 3000000, DEFAULT_COUNT_MS, "Include devices with age less than (in ms)");
 
-    include = AsyncWiFiSettings.string("include", DEFAULT_INCLUDE, "Include only sending these ids to mqtt (eg. apple:iphone10-6 apple:iphone13-2)");
-    exclude = AsyncWiFiSettings.string("exclude", DEFAULT_EXCLUDE, "Exclude sending these ids to mqtt (eg. exp:20 apple:iphone10-6)");
-    maxDistance = AsyncWiFiSettings.floating("max_dist", 0, 100, DEFAULT_MAX_DISTANCE, "Maximum distance to report (in meters)");
-    skipDistance = AsyncWiFiSettings.floating("skip_dist", 0, 10, DEFAULT_SKIP_DISTANCE, "Report early if beacon has moved more than this distance (in meters)");
-    skipMs = AsyncWiFiSettings.integer("skip_ms", 0, 3000000, DEFAULT_SKIP_MS, "Skip reporting if message age is less that this (in milliseconds)");
+    include = HeadlessWiFiSettings.string("include", DEFAULT_INCLUDE, "Include only sending these ids to mqtt (eg. apple:iphone10-6 apple:iphone13-2)");
+    exclude = HeadlessWiFiSettings.string("exclude", DEFAULT_EXCLUDE, "Exclude sending these ids to mqtt (eg. exp:20 apple:iphone10-6)");
+    maxDistance = HeadlessWiFiSettings.floating("max_dist", 0, 100, DEFAULT_MAX_DISTANCE, "Maximum distance to report (in meters)");
+    skipDistance = HeadlessWiFiSettings.floating("skip_dist", 0, 10, DEFAULT_SKIP_DISTANCE, "Report early if beacon has moved more than this distance (in meters)");
+    skipMs = HeadlessWiFiSettings.integer("skip_ms", 0, 3000000, DEFAULT_SKIP_MS, "Skip reporting if message age is less that this (in milliseconds)");
 
-    rxRefRssi = AsyncWiFiSettings.integer("ref_rssi", -100, 100, DEFAULT_RX_REF_RSSI, "Rssi expected from a 0dBm transmitter at 1 meter (NOT used for iBeacons or Eddystone)");
-    rxAdjRssi = AsyncWiFiSettings.integer("rx_adj_rssi", -100, 100, DEFAULT_RX_ADJ_RSSI, "Rssi adjustment for receiver (use only if you know this device has a weak antenna)");
-    absorption = AsyncWiFiSettings.floating("absorption", -100, 100, DEFAULT_ABSORPTION, "Factor used to account for absorption, reflection, or diffraction");
-    forgetMs = AsyncWiFiSettings.integer("forget_ms", 0, 3000000, DEFAULT_FORGET_MS, "Forget beacon if not seen for (in milliseconds)");
-    txRefRssi = AsyncWiFiSettings.integer("tx_ref_rssi", -100, 100, DEFAULT_TX_REF_RSSI, "Rssi expected from this tx power at 1m (used for node iBeacon)");
+    rxRefRssi = HeadlessWiFiSettings.integer("ref_rssi", -100, 100, DEFAULT_RX_REF_RSSI, "Rssi expected from a 0dBm transmitter at 1 meter (NOT used for iBeacons or Eddystone)");
+    rxAdjRssi = HeadlessWiFiSettings.integer("rx_adj_rssi", -100, 100, DEFAULT_RX_ADJ_RSSI, "Rssi adjustment for receiver (use only if you know this device has a weak antenna)");
+    absorption = HeadlessWiFiSettings.floating("absorption", 1, 5, DEFAULT_ABSORPTION, "Factor used to account for absorption, reflection, or diffraction");
+    forgetMs = HeadlessWiFiSettings.integer("forget_ms", 0, 3000000, DEFAULT_FORGET_MS, "Forget beacon if not seen for (in milliseconds)");
+    txRefRssi = HeadlessWiFiSettings.integer("tx_ref_rssi", -100, 0, DEFAULT_TX_REF_RSSI, "Rssi expected from this tx power at 1m (used for node iBeacon)");
+    maxDivisor = HeadlessWiFiSettings.integer("max_divisor", 2, 10, DEFAULT_MAX_DIVISOR, "Max divisor for reporting interval");
 
     std::istringstream iss(knownIrks.c_str());
     std::string irk_hex;
@@ -205,6 +253,9 @@ bool Command(String &command, String &pay) {
     } else if (command == "count_ids") {
         countIds = pay.isEmpty() ? DEFAULT_COUNT_IDS : pay;
         spurt("/count_ids", countIds);
+    } else if (command == "max_divisor") {
+        maxDivisor = pay.isEmpty() ? DEFAULT_MAX_DIVISOR : pay.toInt();
+        spurt("/max_divisor", String(maxDivisor));
     } else
         return false;
     return true;
@@ -243,7 +294,7 @@ BleFingerprint *getFingerprintInternal(BLEAdvertisedDevice *advertisedDevice) {
     if (it != fingerprints.rend())
         return *it;
 
-    auto created = new BleFingerprint(advertisedDevice, ONE_EURO_FCMIN, ONE_EURO_BETA, ONE_EURO_DCUTOFF);
+    auto created = new BleFingerprint(advertisedDevice);
     auto it2 = std::find_if(fingerprints.begin(), fingerprints.end(), [created](BleFingerprint *f) { return f->getId() == created->getId(); });
     if (it2 != fingerprints.end()) {
         auto found = *it2;
@@ -277,6 +328,21 @@ const std::vector<BleFingerprint *> GetCopy() {
 bool FindDeviceConfig(const String &id, DeviceConfig &config) {
     if (xSemaphoreTake(deviceConfigMutex, MAX_WAIT) == pdTRUE) {
         auto it = std::find_if(deviceConfigs.begin(), deviceConfigs.end(), [id](DeviceConfig dc) { return dc.id == id; });
+        if (it != deviceConfigs.end()) {
+            config = *it;
+            xSemaphoreGive(deviceConfigMutex);
+            return true;
+        }
+        xSemaphoreGive(deviceConfigMutex);
+        return false;
+    }
+    log_e("Couldn't take deviceConfigMutex!");
+    return false;
+}
+
+bool FindDeviceConfigByAlias(const String &alias, DeviceConfig &config) {
+    if (xSemaphoreTake(deviceConfigMutex, MAX_WAIT) == pdTRUE) {
+        auto it = std::find_if(deviceConfigs.begin(), deviceConfigs.end(), [alias](DeviceConfig dc) { return dc.alias == alias; });
         if (it != deviceConfigs.end()) {
             config = *it;
             xSemaphoreGive(deviceConfigMutex);

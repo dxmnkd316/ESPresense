@@ -12,6 +12,7 @@ bool sendTelemetry(unsigned int totalSeen, unsigned int totalFpSeen, unsigned in
     if (!online) {
         if (
             pub(statusTopic.c_str(), 0, true, "online")
+            && pub((roomsTopic + "/name").c_str(), 0, true, room.c_str())
             && pub((roomsTopic + "/max_distance").c_str(), 0, true, String(BleFingerprintCollection::maxDistance).c_str())
             && pub((roomsTopic + "/absorption").c_str(), 0, true, String(BleFingerprintCollection::absorption).c_str())
             && pub((roomsTopic + "/tx_ref_rssi").c_str(), 0, true, String(BleFingerprintCollection::txRefRssi).c_str())
@@ -62,6 +63,7 @@ bool sendTelemetry(unsigned int totalSeen, unsigned int totalFpSeen, unsigned in
             && SHT::SendDiscovery()
             && TSL2561::SendDiscovery()
             && SensirionSGP30::SendDiscovery()
+            && SensirionSCD4x::SendDiscovery()
             && HX711::SendDiscovery()
             && DS18B20::SendDiscovery()
 #endif
@@ -72,6 +74,8 @@ bool sendTelemetry(unsigned int totalSeen, unsigned int totalFpSeen, unsigned in
         }
     }
 
+    if (!publishTele)
+        return false;
     auto now = millis();
 
     if (now - lastTeleMillis < 15000)
@@ -118,9 +122,7 @@ bool sendTelemetry(unsigned int totalSeen, unsigned int totalFpSeen, unsigned in
     doc["loopStack"] = uxTaskGetStackHighWaterMark(nullptr);
     doc["bleStack"] = bleStack;
 
-    String buffer;
-    serializeJson(doc, buffer);
-    if (pub(teleTopic.c_str(), 0, false, buffer.c_str())) return true;
+    if (pub(teleTopic.c_str(), 0, false, doc)) return true;
 
     teleFails++;
     log_e("Error after 10 tries sending telemetry (%d times since boot)", teleFails);
@@ -132,33 +134,26 @@ void setupNetwork() {
     WiFi.setScanMethod(WIFI_ALL_CHANNEL_SCAN);
     GUI::Connected(false, false);
 
-#ifdef VERSION
-    AsyncWiFiSettings.info("ESPresense Version: " + String(VERSION));
-#endif
-    room = AsyncWiFiSettings.string("room", ESPMAC, "Room");
-    auto wifiTimeout = AsyncWiFiSettings.integer("wifi_timeout", DEFAULT_WIFI_TIMEOUT, "Seconds to wait for WiFi before captive portal (-1 = forever)");
-    auto portalTimeout = 1000UL * AsyncWiFiSettings.integer("portal_timeout", DEFAULT_PORTAL_TIMEOUT, "Seconds to wait in captive portal before rebooting");
-    std::vector<String> ethernetTypes = {"None", "WT32-ETH01", "ESP32-POE", "WESP32", "QuinLED-ESP32", "TwilightLord-ESP32", "ESP32Deux", "KIT-VE", "LilyGO-T-ETH-POE", "GL-inet GL-S10 v2.1 Ethernet", "EST-PoE-32"};
-    ethernetType = AsyncWiFiSettings.dropdown("eth", ethernetTypes, 0, "Ethernet Type");
+    room = HeadlessWiFiSettings.string("room", ESPMAC, "Room");
+    HeadlessWiFiSettings.string("wifi-ssid", "", "WiFi SSID");
+    HeadlessWiFiSettings.pstring("wifi-password", "", "WiFi Password");
+    auto wifiTimeout = HeadlessWiFiSettings.integer("wifi_timeout", DEFAULT_WIFI_TIMEOUT, "Seconds to wait for WiFi before captive portal (-1 = forever)");
+    auto portalTimeout = 1000UL * HeadlessWiFiSettings.integer("portal_timeout", DEFAULT_PORTAL_TIMEOUT, "Seconds to wait in captive portal before rebooting");
+    std::vector<String> ethernetTypes = {"None", "WT32-ETH01", "ESP32-POE", "WESP32", "QuinLED-ESP32", "TwilightLord-ESP32", "ESP32Deux", "KIT-VE", "LilyGO-T-ETH-POE", "GL-inet GL-S10 v2.1 Ethernet", "EST-PoE-32", "LilyGO-T-ETH-Lite (RTL8201)", "ESP32-POE_A1"};
+    ethernetType = HeadlessWiFiSettings.dropdown("eth", ethernetTypes, 0, "Ethernet Type");
 
-    AsyncWiFiSettings.heading("<a href='https://espresense.com/configuration/settings#mqtt' target='_blank'>MQTT</a>", false);
-    mqttHost = AsyncWiFiSettings.string("mqtt_host", DEFAULT_MQTT_HOST, "Server");
-    mqttPort = AsyncWiFiSettings.integer("mqtt_port", DEFAULT_MQTT_PORT, "Port");
-    mqttUser = AsyncWiFiSettings.pstring("mqtt_user", DEFAULT_MQTT_USER, "Username");
-    mqttPass = AsyncWiFiSettings.pstring("mqtt_pass", DEFAULT_MQTT_PASSWORD, "Password");
-    discovery = AsyncWiFiSettings.checkbox("discovery", true, "Send to discovery topic");
-    homeAssistantDiscoveryPrefix = AsyncWiFiSettings.string("discovery_prefix", DEFAULT_HA_DISCOVERY_PREFIX, "Home Assistant discovery topic prefix");
-    publishTele = AsyncWiFiSettings.checkbox("pub_tele", true, "Send to telemetry topic");
-    publishRooms = AsyncWiFiSettings.checkbox("pub_rooms_dep", false, "Send to rooms topic (deprecated in v4)");
-    publishDevices = AsyncWiFiSettings.checkbox("pub_devices", true, "Send to devices topic");
+    mqttHost = HeadlessWiFiSettings.string("mqtt_host", DEFAULT_MQTT_HOST, "Server");
+    mqttPort = HeadlessWiFiSettings.integer("mqtt_port", DEFAULT_MQTT_PORT, "Port");
+    mqttUser = HeadlessWiFiSettings.pstring("mqtt_user", DEFAULT_MQTT_USER, "Username");
+    mqttPass = HeadlessWiFiSettings.pstring("mqtt_pass", DEFAULT_MQTT_PASSWORD, "Password");
+    discovery = HeadlessWiFiSettings.checkbox("discovery", true, "Send to discovery topic");
+    homeAssistantDiscoveryPrefix = HeadlessWiFiSettings.string("discovery_prefix", DEFAULT_HA_DISCOVERY_PREFIX, "Home Assistant discovery topic prefix");
+    publishTele = HeadlessWiFiSettings.checkbox("pub_tele", true, "Send to telemetry topic");
+    publishDevices = HeadlessWiFiSettings.checkbox("pub_devices", true, "Send to devices topic");
 
-    AsyncWiFiSettings.heading("<a href='https://espresense.com/configuration/settings#updating' target='_blank'>Updating</a>", false);
     Updater::ConnectToWifi();
 
-    AsyncWiFiSettings.info("<a href='ui/#settings' target='_blank'>Click here to edit other settings!</a>", false);
-
-    AsyncWiFiSettings.markExtra();
-
+    HeadlessWiFiSettings.markExtra();
 
     GUI::ConnectToWifi();
 
@@ -179,18 +174,19 @@ void setupNetwork() {
     SHT::ConnectToWifi();
     TSL2561::ConnectToWifi();
     SensirionSGP30::ConnectToWifi();
+    SensirionSCD4x::ConnectToWifi();
     HX711::ConnectToWifi();
     DS18B20::ConnectToWifi();
 #endif
 
     unsigned int connectProgress = 0;
-    AsyncWiFiSettings.onWaitLoop = [&connectProgress]() {
+    HeadlessWiFiSettings.onWaitLoop = [&connectProgress]() {
         GUI::Wifi(connectProgress++);
         SerialImprov::Loop(true);
         return 50;
     };
     unsigned int portalProgress = 0;
-    AsyncWiFiSettings.onPortalWaitLoop = [&portalProgress, portalTimeout]() {
+    HeadlessWiFiSettings.onPortalWaitLoop = [&portalProgress, portalTimeout]() {
         GUI::Portal(portalProgress++);
         SerialImprov::Loop(false);
 
@@ -199,12 +195,12 @@ void setupNetwork() {
 
         return 50;
     };
-    AsyncWiFiSettings.onHttpSetup = HttpWebServer::Init;
-    AsyncWiFiSettings.hostname = "espresense-" + kebabify(room);
+    HeadlessWiFiSettings.onHttpSetup = HttpWebServer::Init;
+    HeadlessWiFiSettings.hostname = "espresense-" + kebabify(room);
 
     bool success = false;
-    if (ethernetType > 0) success = Network.connect(ethernetType, 20, AsyncWiFiSettings.hostname.c_str());
-    if (!success && !AsyncWiFiSettings.connect(true, wifiTimeout))
+    if (ethernetType > 0) success = Network.connect(ethernetType, 20, HeadlessWiFiSettings.hostname.c_str());
+    if (!success && !HeadlessWiFiSettings.connect(true, wifiTimeout))
         ESP.restart();
 
     GUI::Connected(true, false);
@@ -241,6 +237,7 @@ void setupNetwork() {
     SHT::SerialReport();
     TSL2561::SerialReport();
     SensirionSGP30::SerialReport();
+    SensirionSCD4x::SerialReport();
     HX711::SerialReport();
     DS18B20::SerialReport();
 
@@ -263,7 +260,7 @@ void setupNetwork() {
     teleTopic = roomsTopic + "/telemetry";
     setTopic = roomsTopic + "/+/set";
     configTopic = CHANNEL + String("/settings/+/config");
-    AsyncWiFiSettings.httpSetup();
+    HeadlessWiFiSettings.httpSetup();
     Updater::MarkOtaSuccess();
 }
 
@@ -283,7 +280,7 @@ void onMqttDisconnect(AsyncMqttClientDisconnectReason reason) {
 }
 
 void onMqttMessage(const char *topic, const char *payload) {
-    String top = String(topic);
+    String const top = String(topic);
     String pay = String(payload);
 
     auto setPos = top.lastIndexOf("/set");
@@ -305,6 +302,8 @@ void onMqttMessage(const char *topic, const char *payload) {
             ESP.restart();
         else if (command == "wifi-ssid" || command == "wifi-password")
             spurt("/" + command, pay);
+        else if (command == "name")
+            spurt("/room", pay.isEmpty() ? ESPMAC : pay);
         else if (GUI::Command(command, pay))
             ;
         else if (Motion::Command(command, pay))
@@ -356,8 +355,8 @@ void reconnect(TimerHandle_t xTimer) {
         Serial.printf("%u Reconnecting to Network...\r\n", xPortGetCoreID());
 
         bool success = false;
-        if (ethernetType > 0) success = Network.connect(ethernetType, 2, AsyncWiFiSettings.hostname.c_str());
-        if (!success && !AsyncWiFiSettings.connect(true, 40))
+        if (ethernetType > 0) success = Network.connect(ethernetType, 2, HeadlessWiFiSettings.hostname.c_str());
+        if (!success && !HeadlessWiFiSettings.connect(true, 40))
             ESP.restart();
     }
 
@@ -370,7 +369,7 @@ void connectToMqtt() {
     mqttClient.onConnect(onMqttConnect);
     mqttClient.onDisconnect(onMqttDisconnect);
     mqttClient.onMessage(onMqttMessageRaw);
-    mqttClient.setClientId(AsyncWiFiSettings.hostname.c_str());
+    mqttClient.setClientId(HeadlessWiFiSettings.hostname.c_str());
     mqttClient.setServer(mqttHost.c_str(), mqttPort);
     mqttClient.setWill(statusTopic.c_str(), 0, true, "offline");
     mqttClient.setCredentials(mqttUser.c_str(), mqttPass.c_str());
@@ -380,7 +379,7 @@ void connectToMqtt() {
 bool reportBuffer(BleFingerprint *f) {
     if (!mqttClient.connected()) return false;
     auto report = f->getReport();
-    String topic = Sprintf(CHANNEL "/devices/%s/%s/%s", f->getId().c_str(), id.c_str(), report.getId().c_str());
+    String const topic = Sprintf(CHANNEL "/devices/%s/%s/%s", f->getId().c_str(), id.c_str(), report.getId().c_str());
     return mqttClient.publish(topic.c_str(), 0, false, report.getPayload().c_str());
 }
 
@@ -390,23 +389,9 @@ bool reportDevice(BleFingerprint *f) {
     if (!f->report(&obj))
         return false;
 
-    String buffer;
-    serializeJson(doc, buffer);
-    String devicesTopic = Sprintf(CHANNEL "/devices/%s/%s", f->getId().c_str(), id.c_str());
-
-    bool p1 = false, p2 = false;
-    for (int i = 0; i < 10; i++) {
-        if (!mqttClient.connected()) return false;
-        if (!p1 && (!publishRooms || mqttClient.publish(roomsTopic.c_str(), 0, false, buffer.c_str())))
-            p1 = true;
-
-        if (!p2 && (!publishDevices || mqttClient.publish(devicesTopic.c_str(), 0, false, buffer.c_str())))
-            p2 = true;
-
-        if (p1 && p2)
-            return true;
-        delay(20);
-    }
+    String const devicesTopic = Sprintf(CHANNEL "/devices/%s/%s", f->getId().c_str(), id.c_str());
+    if (pub(devicesTopic.c_str(), 0, false, doc))
+        return true;
 
     reportFailed++;
     return false;
@@ -523,15 +508,13 @@ void setup() {
     SPIFFS.begin(true);
     setupNetwork();
     Updater::Setup();
-#if NTP
-    setClock();
-#endif
     GUI::Setup(false);
     Motion::Setup();
     Switch::Setup();
     Button::Setup();
     Battery::Setup();
     CAN::Setup();
+    NTP::Setup();
 #ifdef SENSORS
     DHT::Setup();
     I2C::Setup();
@@ -543,6 +526,7 @@ void setup() {
     SHT::Setup();
     TSL2561::Setup();
     SensirionSGP30::Setup();
+    SensirionSCD4x::Setup();
     HX711::Setup();
     DS18B20::Setup();
 #endif
@@ -567,6 +551,7 @@ void loop() {
     Button::Loop();
     HttpWebServer::Loop();
     SerialImprov::Loop(false);
+    NTP::Loop();
 #if M5STICK
     AXP192::Loop();
 #endif
@@ -580,6 +565,7 @@ void loop() {
     SHT::Loop();
     TSL2561::Loop();
     SensirionSGP30::Loop();
+    SensirionSCD4x::Loop();
     HX711::Loop();
     DS18B20::Loop();
 #endif

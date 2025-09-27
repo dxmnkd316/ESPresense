@@ -1,7 +1,7 @@
 #include "Motion.h"
 
 #include <AsyncMqttClient.h>
-#include <AsyncWiFiSettings.h>
+#include <HeadlessWiFiSettings.h>
 
 #include "GUI.h"
 #include "defaults.h"
@@ -31,14 +31,14 @@ void Setup() {
 
 void ConnectToWifi() {
     std::vector<String> pinTypes = {"Pullup", "Pullup Inverted", "Pulldown", "Pulldown Inverted", "Floating", "Floating Inverted"};
-    pirType = AsyncWiFiSettings.dropdown("pir_type", pinTypes, 0, "PIR motion pin type");
-    pirPin = AsyncWiFiSettings.integer("pir_pin", -1, "PIR motion pin (-1 for disable)");
-    pirTimeout = AsyncWiFiSettings.floating("pir_timeout", 0, 300, DEFAULT_DEBOUNCE_TIMEOUT, "PIR motion timeout (in seconds)");
+    pirType = HeadlessWiFiSettings.dropdown("pir_type", pinTypes, 0, "PIR motion pin type");
+    pirPin = HeadlessWiFiSettings.integer("pir_pin", -1, "PIR motion pin (-1 for disable)");
+    pirTimeout = HeadlessWiFiSettings.floating("pir_timeout", 0, 300, DEFAULT_DEBOUNCE_TIMEOUT, "PIR motion timeout (in seconds)");
     pirDetected = pirType & 0x01 ? LOW : HIGH;
 
-    radarType = AsyncWiFiSettings.dropdown("radar_type", pinTypes, 0, "Radar motion pin type");
-    radarPin = AsyncWiFiSettings.integer("radar_pin", -1, "Radar motion pin (-1 for disable)");
-    radarTimeout = AsyncWiFiSettings.floating("radar_timeout", 0, 300, DEFAULT_DEBOUNCE_TIMEOUT, "Radar motion timeout (in seconds)");
+    radarType = HeadlessWiFiSettings.dropdown("radar_type", pinTypes, 0, "Radar motion pin type");
+    radarPin = HeadlessWiFiSettings.integer("radar_pin", -1, "Radar motion pin (-1 for disable)");
+    radarTimeout = HeadlessWiFiSettings.floating("radar_timeout", 0, 300, DEFAULT_DEBOUNCE_TIMEOUT, "Radar motion timeout (in seconds)");
     radarDetected = radarType & 0x01 ? LOW : HIGH;
 }
 
@@ -51,10 +51,10 @@ void SerialReport() {
 
 static void pirLoop() {
     if (pirPin < 0) return;
-    bool detected = digitalRead(pirPin) == pirDetected;
+    bool const detected = digitalRead(pirPin) == pirDetected;
     if (detected) lastPirMilli = millis();
-    unsigned long since = millis() - lastPirMilli;
-    int pirValue = (detected || since < (pirTimeout * 1000)) ? HIGH : LOW;
+    unsigned long const since = millis() - lastPirMilli;
+    int const pirValue = (detected || since < (pirTimeout * 1000)) ? HIGH : LOW;
 
     if (lastPirValue == pirValue) return;
     pub((roomsTopic + "/pir").c_str(), 0, true, pirValue == HIGH ? "ON" : "OFF");
@@ -63,10 +63,10 @@ static void pirLoop() {
 
 static void radarLoop() {
     if (radarPin < 0) return;
-    bool detected = digitalRead(radarPin) == radarDetected;
+    bool const detected = digitalRead(radarPin) == radarDetected;
     if (detected) lastRadarMilli = millis();
-    unsigned long since = millis() - lastRadarMilli;
-    int radarValue = (detected || since < (radarTimeout * 1000)) ? HIGH : LOW;
+    unsigned long const since = millis() - lastRadarMilli;
+    int const radarValue = (detected || since < (radarTimeout * 1000)) ? HIGH : LOW;
 
     if (lastRadarValue == radarValue) return;
     pub((roomsTopic + "/radar").c_str(), 0, true, radarValue == HIGH ? "ON" : "OFF");
@@ -76,7 +76,7 @@ static void radarLoop() {
 void Loop() {
     pirLoop();
     radarLoop();
-    int motionValue = (lastRadarValue == HIGH || lastPirValue == HIGH) ? HIGH : LOW;
+    int const motionValue = (lastRadarValue == HIGH || lastPirValue == HIGH) ? HIGH : LOW;
     if (lastMotionValue == motionValue) return;
     GUI::Motion(lastPirValue == HIGH, lastRadarValue == HIGH);
     pub((roomsTopic + "/motion").c_str(), 0, true, motionValue == HIGH ? "ON" : "OFF");
