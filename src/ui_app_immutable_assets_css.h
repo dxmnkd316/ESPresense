@@ -6,7 +6,6 @@
 #include <ESPAsyncWebServer.h>
 #include <Arduino.h>
 
-
 // app/immutable/assets/internal.CNjsDNpd.css
 const uint16_t APP_IMMUTABLE_ASSETS_INTERNAL_CNJSDNPD_CSS_L = 5174;
 const uint8_t APP_IMMUTABLE_ASSETS_INTERNAL_CNJSDNPD_CSS[] PROGMEM = {
