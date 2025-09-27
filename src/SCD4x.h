@@ -2,12 +2,12 @@
 #ifdef SENSORS
 #include <ArduinoJson.h>
 
-namespace SCD41m5 {
+namespace SCD4x {
 void ConnectToWifi();
 void SerialReport();
 bool SendDiscovery();
 void Setup();
 void Loop();
-}  // namespace SCD41m5
+}  // namespace SCD4x
 
 #endif
