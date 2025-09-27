@@ -37,7 +37,8 @@ namespace SCD4x
         if (!I2C_Bus_1_Started && !I2C_Bus_2_Started) return;
         Serial.println("bus check complete");
 
-        scd4x = new I2cScd4x();
+//        scd4x = new I2cScd4x();
+        scd4x = new M5UnitSCD4x();
         if (SCD4x_I2c == "0x62") {
             scd4x->begin(SCD4x_I2c_Bus == 1 ? Wire : Wire1, SCD41_I2C_ADDR_62);
             //scd->begin(SCD4x_I2c_Bus == 1 ? Wire : Wire1, SCD41_I2C_ADDR_62);
