@@ -30,35 +30,55 @@ namespace SCD4x
         Serial.println("bus check complete");
 
 //        scd4x = new I2cScd4x();
-        scd4x = new M5UnitSCD4x();
-        if (SCD4x_I2c == "0x62") {
-            scd4x->begin(SCD4x_I2c_Bus == 1 ? Wire : Wire1, SCD41_I2C_ADDR_62);
-        } else {
-            return;
-        }
+//        scd4x = new M5UnitSCD4x();
 
-        if (!scd4x.begin(&Wire, SCD4x_I2C_ADDR, 2, 1, 400000U)) {
-            Serial.println("Couldn't find SCD4x");
-            while (1) delay(1);
-        }
-
-        uint16_t error;
-        // stop potentially previously started measurement
-        error = scd4x.stopPeriodicMeasurement();
-        if (error) {
-            Serial.print("Error trying to execute stopPeriodicMeasurement(): ");
-        }
-
-        // Start Measurement
-        error = scd4x.startPeriodicMeasurement();
-        if (error) {
-            Serial.print("Error trying to execute startPeriodicMeasurement(): ");
-        }
-
-        Serial.println("Waiting for first measurement... (5 sec)");
+    if (!scd4x.begin(&Wire, SCD4X_I2C_ADDR, 2, 1, 400000U)) {
+        Serial.println("Couldn't find SCD4X");
+        while (1) delay(1);
     }
 
+    uint16_t error;
+    // stop potentially previously started measurement
+    error = scd4x.stopPeriodicMeasurement();
+    if (error) {
+        Serial.print("Error trying to execute stopPeriodicMeasurement(): ");
+    }
 
+    // Start Measurement
+    error = scd4x.startPeriodicMeasurement();
+    if (error) {
+        Serial.print("Error trying to execute startPeriodicMeasurement(): ");
+    }
+
+    Serial.println("Waiting for first measurement... (5 sec)");
+}
+    
+//        if (SCD4x_I2c == "0x62") {
+//            scd4x->begin(SCD4x_I2c_Bus == 1 ? Wire : Wire1, SCD41_I2C_ADDR_62);
+//        } else {
+//            return;
+//        }
+//
+//        if (!scd4x.begin(&Wire, SCD4x_I2C_ADDR, 2, 1, 400000U)) {
+//            Serial.println("Couldn't find SCD4x");
+//            while (1) delay(1);
+//        }
+
+//        uint16_t error;
+        // stop potentially previously started measurement
+//        error = scd4x.stopPeriodicMeasurement();
+//        if (error) {
+//            Serial.print("Error trying to execute stopPeriodicMeasurement(): ");
+//        }
+
+        // Start Measurement
+//        error = scd4x.startPeriodicMeasurement();
+//        if (error) {
+//            Serial.print("Error trying to execute startPeriodicMeasurement(): ");
+//        }
+//
+//        Serial.println("Waiting for first measurement... (5 sec)");
+//    }
 
 
 
