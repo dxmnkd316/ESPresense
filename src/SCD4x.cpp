@@ -6,7 +6,7 @@
 #include <HeadlessWiFiSettings.h>
 #include "string_utils.h"
 
-#include "M5UnitSCD4x.h"
+#include <M5UnitSCD4x.h>
 //#include <M5UnitENV.h>
 //#include <M5UnitUnifiedENV.h>
 
@@ -24,14 +24,6 @@ namespace SCD4x
     unsigned long SCD4xPreviousSensorMillis = 0;
     unsigned long SCD4xPreviousReportMillis = 0;
 
-    //SHT4X sht;
-//    String ENVIVBMP280_I2c;
-//    int ENVIVBMP280_I2c_Bus;  
-//    unsigned long BMP280PreviousMillis = 0;
-//    int sensorInterval = 60000;
-//    bool initialized = false;
-//    bool initializedsht = false;
-
     void Setup() {
         Serial.println("starting scd41 setup");
         if (!I2C_Bus_1_Started && !I2C_Bus_2_Started) return;
@@ -41,7 +33,6 @@ namespace SCD4x
         scd4x = new M5UnitSCD4x();
         if (SCD4x_I2c == "0x62") {
             scd4x->begin(SCD4x_I2c_Bus == 1 ? Wire : Wire1, SCD41_I2C_ADDR_62);
-            //scd->begin(SCD4x_I2c_Bus == 1 ? Wire : Wire1, SCD41_I2C_ADDR_62);
         } else {
             return;
         }
