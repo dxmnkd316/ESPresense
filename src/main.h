@@ -49,6 +49,7 @@
 #include "TSL2561.h"
 #include "DS18B20.h"
 #include "ENVIV.h"
+#include "SCD4x.h"
 #endif
 
 TimerHandle_t reconnectTimer;
