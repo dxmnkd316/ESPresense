@@ -67,6 +67,7 @@ bool sendTelemetry(unsigned int totalSeen, unsigned int totalFpSeen, unsigned in
             && HX711::SendDiscovery()
             && DS18B20::SendDiscovery()
             && ENVIV::SendDiscovery()
+            && SCD4x::SendDiscovery()
 #endif
         ) {
             sentDiscovery = true;
@@ -179,6 +180,7 @@ void setupNetwork() {
     HX711::ConnectToWifi();
     DS18B20::ConnectToWifi();
     ENVIV::ConnectToWifi();
+    SCD4x::ConnectToWifi();
 #endif
 
     unsigned int connectProgress = 0;
@@ -243,6 +245,7 @@ void setupNetwork() {
     HX711::SerialReport();
     DS18B20::SerialReport();
     ENVIV::SerialReport();
+    SCD4x::SerialReport();
 
 #endif
     Serial.print("Query:        ");
@@ -533,6 +536,7 @@ void setup() {
     HX711::Setup();
     DS18B20::Setup();
     ENVIV::Setup();
+    SCD4x::Setup();
 #endif
     xTaskCreatePinnedToCore(scanTask, "scanTask", SCAN_TASK_STACK_SIZE, nullptr, 1, &scanTaskHandle, CONFIG_BT_NIMBLE_PINNED_TO_CORE);
     reportSetup();
@@ -573,5 +577,6 @@ void loop() {
     HX711::Loop();
     DS18B20::Loop();
     ENVIV::Loop();
+    SCD4x::Loop();
 #endif
 }
