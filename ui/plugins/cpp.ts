@@ -366,10 +366,13 @@ export function cppPlugin(options: CppPluginOptions = {}): Plugin {
             totalCompressedSize += compressed.length;
 
             header += `// ${asset.path}\n`;
-            header += `const uint16_t ${compressed.name}_L = ${compressed.length};\n`;
+            header += `const uint32_t ${compressed.name}_L = ${compressed.length};\n`;
             header += `const uint8_t ${compressed.name}[] PROGMEM = {\n${compressed.array}\n};\n\n`;
             header += `inline void serve${pascalCase(asset.name)}(AsyncWebServerRequest* request) {\n`;
-            header += `  AsyncWebServerResponse *response = request->beginResponse_P(200, "${asset.contentType}", ${compressed.name}, ${compressed.name}_L);\n`;
+            header += `  AsyncWebServerResponse *response = request->beginResponse(200, "${asset.contentType}", ${compressed.name}, ${compressed.name}_L);\n`;
+            if (asset.path.includes("immutable")) {
+              header += `  response->addHeader(F("Cache-Control"), "public, max-age=31536000, immutable");\n`;
+            }
             if (compressed.useCompression) {
               header += `  response->addHeader(F("Content-Encoding"), "gzip");\n`;
             }

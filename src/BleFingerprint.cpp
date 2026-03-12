@@ -7,6 +7,8 @@
 #include "MiFloraHandler.h"
 #include "NameModelHandler.h"
 #include "defaults.h"
+#include "globals.h"
+#include "Logger.h"
 #include "mbedtls/aes.h"
 #include "rssi.h"
 #include "string_utils.h"
@@ -20,7 +22,11 @@ class ClientCallbacks : public BLEClientCallbacks {
 
 static ClientCallbacks clientCB;
 
+#ifdef NIMBLE_V2
+BleFingerprint::BleFingerprint(const NimBLEAdvertisedDevice *advertisedDevice) {
+#else
 BleFingerprint::BleFingerprint(BLEAdvertisedDevice *advertisedDevice) {
+#endif
     firstSeenMillis = millis();
     address = NimBLEAddress(advertisedDevice->getAddress());
     addressType = advertisedDevice->getAddressType();
@@ -47,10 +53,22 @@ bool BleFingerprint::shouldHide(const String &s) {
     return (BleFingerprintCollection::exclude.length() > 0 && prefixExists(BleFingerprintCollection::exclude, s));
 }
 
+/**
+ * @brief Assigns a new identifier and related metadata to this fingerprint and updates scheduling/state.
+ *
+ * Updates the fingerprint's id and idType (respecting valid idType transitions), applies device configuration
+ * overrides (calibrated RSSI, alias, and name), and recalculates derived flags and timing used for reporting
+ * and querying (ignore, countable, allowQuery, hidden, isNode, qryDelayMillis, nextReportMs, etc.).
+ *
+ * @param newId The identifier to assign (e.g., "mac:...", "name:...", "node:...").
+ * @param newIdType Numeric type code for the identifier; negative values mark the fingerprint as ignored.
+ * @param newName Optional human-readable name to assign if not overridden by device config.
+ * @return true if the id was accepted and state updated; `false` if the requested idType transition is invalid.
+ */
 bool BleFingerprint::setId(const String &newId, short newIdType, const String &newName) {
     if (idType < 0 && newIdType < 0 && newIdType >= idType) return false;
     if (idType > 0 && newIdType <= idType) return false;
-    // Serial.printf("setId: %s %d %s OLD idType: %d\r\n", newId.c_str(), newIdType, newName.c_str(), idType);
+    // Log.printf("setId: %s %d %s OLD idType: %d\r\n", newId.c_str(), newIdType, newName.c_str(), idType);
 
     ignore = newIdType < 0;
     idType = newIdType;
@@ -104,7 +122,11 @@ bool BleFingerprint::setId(const String &newId, short newIdType, const String &n
 }
 
 const String BleFingerprint::getMac() const {
+#ifdef NIMBLE_V2
+    const auto nativeAddress = address.getVal();
+#else
     const auto nativeAddress = address.getNative();
+#endif
     return Sprintf("%02x%02x%02x%02x%02x%02x", nativeAddress[5], nativeAddress[4], nativeAddress[3], nativeAddress[2], nativeAddress[1], nativeAddress[0]);
 }
 
@@ -116,7 +138,11 @@ const int BleFingerprint::get1mRssi() const {
     return BleFingerprintCollection::rxRefRssi + DEFAULT_TX;
 }
 
-void BleFingerprint::fingerprint(NimBLEAdvertisedDevice *advertisedDevice) {
+#ifdef NIMBLE_V2
+void BleFingerprint::fingerprint(const NimBLEAdvertisedDevice *advertisedDevice) {
+#else
+void BleFingerprint::fingerprint(BLEAdvertisedDevice *advertisedDevice) {
+#endif
     if (advertisedDevice->haveName()) {
         const std::string name = advertisedDevice->getName();
         if (!name.empty()) setId(String("name:") + kebabify(name).c_str(), ID_TYPE_NAME, String(name.c_str()));
@@ -159,6 +185,15 @@ struct encryption_block {
     uint8_t cipher_text[16];
 };
 
+/**
+ * @brief Determines whether a Resolvable Private Address (RPA) was generated from a given IRK.
+ *
+ * Compares the RPA against the value derived from the supplied IRK using the BLE RPA resolution algorithm.
+ *
+ * @param rpa Pointer to the 6-byte Resolvable Private Address (least-significant byte first).
+ * @param irk Pointer to the 16-byte Identity Resolving Key.
+ * @return true if the RPA matches the value derived from the IRK, false otherwise.
+ */
 bool ble_ll_resolv_rpa(const uint8_t *rpa, const uint8_t *irk) {
     struct encryption_block ecb;
 
@@ -184,7 +219,7 @@ bool ble_ll_resolv_rpa(const uint8_t *rpa, const uint8_t *irk) {
 
     if (ecb.cipher_text[15] != rpa[0] || ecb.cipher_text[14] != rpa[1] || ecb.cipher_text[13] != rpa[2]) return false;
 
-    // Serial.printf("RPA resolved %d %02x%02x%02x %02x%02x%02x\r\n", err, rpa[0], rpa[1], rpa[2], ecb.cipher_text[15], ecb.cipher_text[14], ecb.cipher_text[13]);
+    // Log.printf("RPA resolved %d %02x%02x%02x %02x%02x%02x\r\n", err, rpa[0], rpa[1], rpa[2], ecb.cipher_text[15], ecb.cipher_text[14], ecb.cipher_text[13]);
 
     return true;
 }
@@ -201,13 +236,17 @@ void BleFingerprint::fingerprintAddress() {
                 break;
             case BLE_ADDR_RANDOM:
             case BLE_ADDR_RANDOM_ID: {
+#ifdef NIMBLE_V2
+                const auto naddress = address.getVal();
+#else
                 const auto *naddress = address.getNative();
+#endif
                 if ((naddress[5] & 0xc0) == 0xc0)
                     setId(mac, ID_TYPE_RAND_STATIC_MAC);
                 else {
-                    auto irks = BleFingerprintCollection::irks;
-                    auto it = std::find_if(irks.begin(), irks.end(), [naddress](uint8_t *irk) { return ble_ll_resolv_rpa(naddress, irk); });
-                    if (it != irks.end()) {
+                    const auto &knownIrks = BleFingerprintCollection::irks;
+                    auto it = std::find_if(knownIrks.begin(), knownIrks.end(), [naddress](uint8_t *irk) { return ble_ll_resolv_rpa(naddress, irk); });
+                    if (it != knownIrks.end()) {
                         auto irk_hex = hexStr(*it, 16);
                         setId(String("irk:") + irk_hex.c_str(), ID_TYPE_KNOWN_IRK);
                         break;
@@ -223,11 +262,29 @@ void BleFingerprint::fingerprintAddress() {
     }
 }
 
-void BleFingerprint::fingerprintServiceAdvertisements(NimBLEAdvertisedDevice *advertisedDevice, size_t serviceAdvCount, bool haveTxPower, int8_t txPower) {
+/**
+ * @brief Derives a service-advertisement based fingerprint and assigns a corresponding ID and adjusted RSSI.
+ *
+ * Examines the advertised service UUIDs from the provided device. If a known service UUID is found,
+ * assigns a specific vendor/type ID (e.g., tile, sonos, itag, trackr, etc.), sets `asRssi` using the
+ * reference RX level and TX power if available, and returns immediately. If none of the known UUIDs
+ * match, constructs a generic fingerprint string prefixed with "ad:" followed by the concatenated
+ * service UUIDs and an optional TX power suffix, sets `asRssi`, and sets the ID to `ID_TYPE_AD`.
+ *
+ * @param advertisedDevice The advertised device to inspect for service UUIDs.
+ * @param serviceAdvCount Number of service UUID entries present in `advertisedDevice`.
+ * @param haveTxPower True if a TX power value is present in the advertisement; otherwise false.
+ * @param txPower Advertised TX power in dBm (typically a negative value) when `haveTxPower` is true.
+ */
+#ifdef NIMBLE_V2
+void BleFingerprint::fingerprintServiceAdvertisements(const NimBLEAdvertisedDevice *advertisedDevice, size_t serviceAdvCount, bool haveTxPower, int8_t txPower) {
+#else
+void BleFingerprint::fingerprintServiceAdvertisements(BLEAdvertisedDevice *advertisedDevice, size_t serviceAdvCount, bool haveTxPower, int8_t txPower) {
+#endif
     for (auto i = 0; i < serviceAdvCount; i++) {
         auto uuid = advertisedDevice->getServiceUUID(i);
 #ifdef VERBOSE
-        Serial.printf("Verbose | %s | %-58s%.1fdBm AD: %s\r\n", getMac().c_str(), getId().c_str(), rssi, advertisedDevice->getServiceUUID(i).toString().c_str());
+        Log.printf("Verbose | %s | %-58s%.1fdBm AD: %s\r\n", getMac().c_str(), getId().c_str(), rssi, advertisedDevice->getServiceUUID(i).toString().c_str());
 #endif
         if (uuid == tileUUID) {
             asRssi = BleFingerprintCollection::rxRefRssi + TILE_TX;
@@ -282,14 +339,30 @@ void BleFingerprint::fingerprintServiceAdvertisements(NimBLEAdvertisedDevice *ad
     setId(fingerprint, ID_TYPE_AD);
 }
 
-void BleFingerprint::fingerprintServiceData(NimBLEAdvertisedDevice *advertisedDevice, size_t serviceDataCount, bool haveTxPower, int8_t txPower) {
+/**
+ * @brief Extracts and processes service data entries from an advertised BLE device to update fingerprint fields.
+ *
+ * Examines each service data entry and, for recognized UUIDs, updates identity, RSSI reference values,
+ * telemetry fields (temperature, humidity, voltage, battery), and beacon-related RSSI candidates.
+ * Unrecognized service data UUIDs are appended into a composite service-data fingerprint which becomes the ID.
+ *
+ * @param advertisedDevice The advertised device containing service data entries.
+ * @param serviceDataCount Number of service data entries present on the advertised device.
+ * @param haveTxPower True if the advertisement included TX power; used to adjust RSSI reference candidates.
+ * @param txPower The advertised TX power value (in dBm) when haveTxPower is true.
+ */
+#ifdef NIMBLE_V2
+void BleFingerprint::fingerprintServiceData(const NimBLEAdvertisedDevice *advertisedDevice, size_t serviceDataCount, bool haveTxPower, int8_t txPower) {
+#else
+void BleFingerprint::fingerprintServiceData(BLEAdvertisedDevice *advertisedDevice, size_t serviceDataCount, bool haveTxPower, int8_t txPower) {
+#endif
     asRssi = haveTxPower ? BleFingerprintCollection::rxRefRssi + txPower : NO_RSSI;
     String fingerprint = "";
     for (int i = 0; i < serviceDataCount; i++) {
         BLEUUID uuid = advertisedDevice->getServiceDataUUID(i);
         std::string strServiceData = advertisedDevice->getServiceData(i);
 #ifdef VERBOSE
-        Serial.printf("Verbose | %s | %-58s%.1fdBm SD: %s/%s\r\n", getMac().c_str(), getId().c_str(), rssi, uuid.toString().c_str(), hexStr(strServiceData).c_str());
+        Log.printf("Verbose | %s | %-58s%.1fdBm SD: %s/%s\r\n", getMac().c_str(), getId().c_str(), rssi, uuid.toString().c_str(), hexStr(strServiceData).c_str());
 #endif
 
         if (uuid == exposureUUID) {  // found COVID-19 exposure tracker
@@ -308,7 +381,7 @@ void BleFingerprint::fingerprintServiceData(NimBLEAdvertisedDevice *advertisedDe
                 mv = *(uint16_t *)(serviceData + 10);
                 battery = serviceData[12];
 #ifdef VERBOSE
-                Serial.printf("Temp: %.2f°, Humidity: %.2f%%, mV: %hu, Battery: %hhu%%, flg: 0x%02hhx, cout: %hhu\r\n", temp, humidity, mv, battery, serviceData[14], serviceData[13]);
+                Log.printf("Temp: %.2f°, Humidity: %.2f%%, mV: %hu, Battery: %hhu%%, flg: 0x%02hhx, cout: %hhu\r\n", temp, humidity, mv, battery, serviceData[14], serviceData[13]);
 #endif
                 setId("miTherm:" + getMac(), ID_TYPE_MITHERM);
             } else if (strServiceData.length() == 13) {  // format atc1441
@@ -320,10 +393,11 @@ void BleFingerprint::fingerprintServiceData(NimBLEAdvertisedDevice *advertisedDe
                 battery = serviceData[9];
 
 #ifdef VERBOSE
-                Serial.printf("Temp: %.2f°, Humidity: %.2f%%, mV: %hu, Battery: %hhu%%, cout: %hhu\r\n", temp, humidity, mv, battery, serviceData[12]);
+                Log.printf("Temp: %.2f°, Humidity: %.2f%%, mV: %hu, Battery: %hhu%%, cout: %hhu\r\n", temp, humidity, mv, battery, serviceData[12]);
 #endif
                 setId("miTherm:" + getMac(), ID_TYPE_MITHERM);
             }
+#ifndef NIMBLE_V2
         } else if (uuid == eddystoneUUID && strServiceData.length() > 0) {
             if (strServiceData[0] == EDDYSTONE_URL_FRAME_TYPE && strServiceData.length() <= 18) {
                 BLEEddystoneURL oBeacon = BLEEddystoneURL();
@@ -335,7 +409,7 @@ void BleFingerprint::fingerprintServiceData(NimBLEAdvertisedDevice *advertisedDe
                 temp = oBeacon.getTemp();
                 mv = oBeacon.getVolt();
 #ifdef VERBOSE
-                Serial.println(oBeacon.toString().c_str());
+                Log.println(oBeacon.toString().c_str());
 #endif
             } else if (strServiceData[0] == 0x00) {
                 auto serviceData = strServiceData.c_str();
@@ -348,8 +422,10 @@ void BleFingerprint::fingerprintServiceData(NimBLEAdvertisedDevice *advertisedDe
                               strServiceData[16], strServiceData[17]),
                       ID_TYPE_EBEACON);
             }
+#endif
         } else {
-            fingerprint = fingerprint + uuid.toString().c_str();
+            std::string uuidStr = uuid.toString();
+            fingerprint = fingerprint + uuidStr.c_str();
         }
     }
     if (!fingerprint.isEmpty()) {
@@ -358,10 +434,30 @@ void BleFingerprint::fingerprintServiceData(NimBLEAdvertisedDevice *advertisedDe
     }
 }
 
-void BleFingerprint::fingerprintManufactureData(NimBLEAdvertisedDevice *advertisedDevice, bool haveTxPower, int8_t txPower) {
+/**
+ * @brief Parse manufacturer-specific advertisement data and derive device fingerprint metadata.
+ *
+ * Inspects the manufacturer data payload from the provided advertised device and, depending on
+ * known manufacturer IDs and beacon formats, assigns an appropriate identifier and identifier
+ * type, and updates beacon/manufacturer RSSI candidates used for downstream distance/typing logic.
+ *
+ * Recognized payloads include Apple iBeacon and Apple Nearby/FindMy variants, Sonos, Garmin,
+ * iTrack, Mi-Fit, select Microsoft and Samsung formats, AltBeacon, and a generic manufacturer
+ * fallback. When TX power is provided (haveTxPower == true) the TX value may be applied to the
+ * computed manufacturer RSSI candidate.
+ *
+ * @param advertisedDevice The advertised device whose manufacturer data will be parsed.
+ * @param haveTxPower True if the advertisement included a TX power field; used to adjust RSSI candidates.
+ * @param txPower The TX power value from the advertisement (meaningful only when haveTxPower is true).
+ */
+#ifdef NIMBLE_V2
+void BleFingerprint::fingerprintManufactureData(const NimBLEAdvertisedDevice *advertisedDevice, bool haveTxPower, int8_t txPower) {
+#else
+void BleFingerprint::fingerprintManufactureData(BLEAdvertisedDevice *advertisedDevice, bool haveTxPower, int8_t txPower) {
+#endif
     std::string strManufacturerData = advertisedDevice->getManufacturerData();
 #ifdef VERBOSE
-    Serial.printf("Verbose | %s | %-58s%.1fdBm MD: %s\r\n", getMac().c_str(), getId().c_str(), rssi, hexStr(strManufacturerData).c_str());
+    Log.printf("Verbose | %s | %-58s%.1fdBm MD: %s\r\n", getMac().c_str(), getId().c_str(), rssi, hexStr(strManufacturerData).c_str());
 #endif
     if (strManufacturerData.length() >= 2) {
         String manuf = Sprintf("%02x%02x", strManufacturerData[1], strManufacturerData[0]);
@@ -370,7 +466,11 @@ void BleFingerprint::fingerprintManufactureData(NimBLEAdvertisedDevice *advertis
         {
             if (strManufacturerData.length() == 25 && strManufacturerData[2] == 0x02 && strManufacturerData[3] == 0x15) {
                 BLEBeacon oBeacon = BLEBeacon();
+#ifdef NIMBLE_V2
+                oBeacon.setData(reinterpret_cast<const uint8_t *>(strManufacturerData.data()), static_cast<uint8_t>(strManufacturerData.size()));
+#else
                 oBeacon.setData(strManufacturerData);
+#endif
                 bcnRssi = oBeacon.getSignalPower();
                 setId(Sprintf("iBeacon:%s-%u-%u", std::string(oBeacon.getProximityUUID()).c_str(), ENDIAN_CHANGE_U16(oBeacon.getMajor()), ENDIAN_CHANGE_U16(oBeacon.getMinor())), bcnRssi != 3 ? ID_TYPE_IBEACON : ID_TYPE_ECHO_LOST);
             } else if (strManufacturerData.length() >= 4 && strManufacturerData[2] == 0x10) {
@@ -420,7 +520,11 @@ void BleFingerprint::fingerprintManufactureData(NimBLEAdvertisedDevice *advertis
             setId("samsung:" + getMac(), ID_TYPE_MISC);
         } else if (manuf == "beac" && strManufacturerData.length() == 26) {
             BLEBeacon oBeacon = BLEBeacon();
+#ifdef NIMBLE_V2
+            oBeacon.setData(reinterpret_cast<const uint8_t *>(strManufacturerData.data()), static_cast<uint8_t>(strManufacturerData.size()));
+#else
             oBeacon.setData(strManufacturerData.substr(0, 25));
+#endif
             setId(Sprintf("altBeacon:%s-%u-%u", std::string(oBeacon.getProximityUUID()).c_str(), ENDIAN_CHANGE_U16(oBeacon.getMajor()), ENDIAN_CHANGE_U16(oBeacon.getMinor())), ID_TYPE_ABEACON);
             bcnRssi = oBeacon.getSignalPower();
         } else if (manuf != "0000") {
@@ -432,7 +536,11 @@ void BleFingerprint::fingerprintManufactureData(NimBLEAdvertisedDevice *advertis
     }
 }
 
+#ifdef NIMBLE_V2
+bool BleFingerprint::seen(const NimBLEAdvertisedDevice *advertisedDevice) {
+#else
 bool BleFingerprint::seen(BLEAdvertisedDevice *advertisedDevice) {
+#endif
     lastSeenMillis = millis();
     reported = false;
 
@@ -527,8 +635,17 @@ bool BleFingerprint::report(JsonObject *doc) {
     return true;
 }
 
+/**
+ * @brief Attempts a BLE query for this fingerprint when querying is allowed and timing/RSSI constraints are met.
+ *
+ * Initiates a client connection to the device address, invokes the appropriate data request handler
+ * (MiFloraHandler for "flora:" IDs, otherwise NameModelHandler), and updates internal query state
+ * such as `isQuerying`, `lastQryMillis`, `qryAttempts`, and `qryDelayMillis`.
+ *
+ * @returns `true` if a query attempt was initiated, `false` otherwise.
+ */
 bool BleFingerprint::query() {
-    if (!allowQuery || isQuerying) return false;
+    if (!allowQuery || isQuerying || enrolling) return false;
     if (rssi < -90) return false; // Too far away
 
     auto now = millis();
@@ -540,9 +657,13 @@ bool BleFingerprint::query() {
 
     bool success = false;
 
-    Serial.printf("%u Query  | %s | %-58s%.1fdBm %lums\r\n", xPortGetCoreID(), getMac().c_str(), id.c_str(), rssi, now - lastSeenMillis);
+    Log.printf("%u Query  | %s | %-58s%.1fdBm %lums\r\n", xPortGetCoreID(), getMac().c_str(), id.c_str(), rssi, now - lastSeenMillis);
 
+#ifdef NIMBLE_V2
+    NimBLEClient *pClient = NimBLEDevice::getCreatedClientCount() ? NimBLEDevice::getClientByPeerAddress(address) : nullptr;
+#else
     NimBLEClient *pClient = NimBLEDevice::getClientListSize() ? NimBLEDevice::getClientByPeerAddress(address) : nullptr;
+#endif
     if (!pClient) pClient = NimBLEDevice::getDisconnectedClient();
     if (!pClient) pClient = NimBLEDevice::createClient();
     pClient->setClientCallbacks(&clientCB, false);
@@ -566,7 +687,7 @@ bool BleFingerprint::query() {
     } else {
         qryAttempts++;
         qryDelayMillis = min(int(pow(10, qryAttempts)), 60000);
-        Serial.printf("%u QryErr | %s | %-58s%.1fdBm Try %d, retry after %dms\r\n", xPortGetCoreID(), getMac().c_str(), id.c_str(), rssi, qryAttempts, qryDelayMillis);
+        Log.printf("%u QryErr | %s | %-58s%.1fdBm Try %d, retry after %dms\r\n", xPortGetCoreID(), getMac().c_str(), id.c_str(), rssi, qryAttempts, qryDelayMillis);
     }
     isQuerying = false;
     return true;

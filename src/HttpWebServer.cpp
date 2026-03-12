@@ -24,8 +24,7 @@ void serializeState(JsonObject &root) {
 void serializeConfigs(JsonObject &root) {
     JsonArray configs = root.createNestedArray("configs");
 
-    auto deviceConfigs = BleFingerprintCollection::deviceConfigs;
-    for (auto it = deviceConfigs.begin(); it != deviceConfigs.end(); ++it) {
+    for (auto it = BleFingerprintCollection::deviceConfigs.begin(); it != BleFingerprintCollection::deviceConfigs.end(); ++it) {
         const JsonObject &node = configs.createNestedObject();
         node["id"] = it->id;
         node["alias"] = it->alias;
@@ -37,16 +36,18 @@ void serializeConfigs(JsonObject &root) {
 void serializeDevices(JsonObject &root, bool showAll) {
     JsonArray devices = root.createNestedArray("devices");
 
-    auto f = BleFingerprintCollection::GetCopy();
-    for (auto it = f.begin(); it != f.end(); ++it) {
-        bool visible = (*it)->getVisible();
+    size_t cursor = 0;
+    while (auto lease = BleFingerprintCollection::AcquireNext(cursor)) {
+        auto *fingerprint = lease.fingerprint;
+        bool visible = fingerprint->getVisible();
         if (showAll || visible) {
             JsonObject node = devices.createNestedObject();
-            if ((*it)->fill(&node)) {
+            if (fingerprint->fill(&node)) {
                 if (showAll && visible) node[F("vis")] = true;
             } else
                 devices.remove(devices.size() - 1);
         }
+        BleFingerprintCollection::Release(lease);
     }
 }
 
@@ -63,7 +64,7 @@ void serveJson(AsyncWebServerRequest *request) {
 
     int const paramsNr = request->params();
     for (int i = 0; i < paramsNr; i++) {
-        AsyncWebParameter *p = request->getParam(i);
+        const AsyncWebParameter *p = request->getParam(i);
         if (p->name() == "showAll") showAll = true;
     }
 
@@ -101,7 +102,7 @@ void sendDataWs(AsyncWebSocketClient *client) {
             ws.cleanupClients(0);  // disconnect all clients to release memory
             return;                // out of memory
         }
-        serializeJson(doc, (char *)buffer->get(), len + 1);
+        serializeJson(doc, buffer->get(), len);
     }
     if (client) {
         client->text(buffer);
@@ -141,8 +142,14 @@ void onRestart(AsyncWebServerRequest *request) {
 
 void Init(AsyncWebServer *server) {
     DefaultHeaders::Instance().addHeader(F("Access-Control-Allow-Origin"), "*");
-    DefaultHeaders::Instance().addHeader(F("Access-Control-Allow-Methods"), "*");
-    DefaultHeaders::Instance().addHeader(F("Access-Control-Allow-Headers"), "*");
+    DefaultHeaders::Instance().addHeader(F("Access-Control-Allow-Methods"), "GET, POST, DELETE, OPTIONS");
+    DefaultHeaders::Instance().addHeader(F("Access-Control-Allow-Headers"), "Content-Type");
+
+    // Low-risk browser hardening headers for the local Web UI and JSON endpoints.
+    DefaultHeaders::Instance().addHeader(F("X-Content-Type-Options"), F("nosniff"));
+    DefaultHeaders::Instance().addHeader(F("Referrer-Policy"), F("no-referrer"));
+    DefaultHeaders::Instance().addHeader(F("Permissions-Policy"),
+                                         F("accelerometer=(), camera=(), geolocation=(), gyroscope=(), microphone=(), usb=()"));
 
     server->on("/", HTTP_OPTIONS, [](AsyncWebServerRequest *request) {
         AsyncWebServerResponse *response = request->beginResponse(200);
@@ -153,6 +160,7 @@ void Init(AsyncWebServer *server) {
     setupRoutes(server); // from ui_routes.h
 
     server->on("/restart", HTTP_POST, onRestart);
+    server->on("/reboot", HTTP_POST, onRestart);
     server->on("/json", HTTP_GET, serveJson);
 
     server->on("/json/configs", HTTP_DELETE, [](AsyncWebServerRequest *request) {

@@ -7,7 +7,7 @@
 #include <Arduino.h>
 
 // favicon.svg
-const uint16_t FAVICON_SVG_L = 456;
+const uint32_t FAVICON_SVG_L = 456;
 const uint8_t FAVICON_SVG[] PROGMEM = {
   0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x03, 0x8d, 0x53, 0xc5, 0xb6, 0xdd, 0x30,
   0x0c, 0xdc, 0xbf, 0xaf, 0xd0, 0x71, 0xd7, 0x56, 0x2c, 0x63, 0xd2, 0xc7, 0xb8, 0x6a, 0x77, 0xed,
@@ -41,7 +41,7 @@ const uint8_t FAVICON_SVG[] PROGMEM = {
 };
 
 inline void serveFaviconSvg(AsyncWebServerRequest* request) {
-  AsyncWebServerResponse *response = request->beginResponse_P(200, "image/svg+xml", FAVICON_SVG, FAVICON_SVG_L);
+  AsyncWebServerResponse *response = request->beginResponse(200, "image/svg+xml", FAVICON_SVG, FAVICON_SVG_L);
   response->addHeader(F("Content-Encoding"), "gzip");
   request->send(response);
 }

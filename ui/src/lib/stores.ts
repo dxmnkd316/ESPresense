@@ -21,7 +21,7 @@ export const roomName = readable<string>('', function start(set) {
             .catch((ex) => {
                 outstanding = false;
                 if (errors++ > 5) set('');
-                console.log(ex);
+                console.error('Failed to fetch room name:', ex);
             });
     }, 1000);
 
@@ -30,17 +30,44 @@ export const roomName = readable<string>('', function start(set) {
     };
 });
 
-// Dark mode store with persistence
-export const darkMode = writable<boolean>(false, (set) => {
-    if (typeof window !== 'undefined') {
-        // Initialize from localStorage or system preference
-        const stored = localStorage.getItem('darkMode');
-        const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-        const isDark = stored ? stored === 'true' : systemPrefersDark;
-        set(isDark);
+type ThemeMode = 'system' | 'light' | 'dark';
 
-        // Update document class
-        if (isDark) document.documentElement.classList.add('dark');
+const themeStorageKey = 'theme';
+const legacyDarkModeKey = 'darkMode';
+
+function getSystemPrefersDark(): boolean {
+    return typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+        ? window.matchMedia('(prefers-color-scheme: dark)').matches
+        : false;
+}
+
+function applyTheme(mode: ThemeMode): void {
+    if (typeof document === 'undefined') return;
+    const isDark = mode === 'dark' || (mode === 'system' && getSystemPrefersDark());
+    document.documentElement.classList.toggle('dark', isDark);
+}
+
+function resolveInitialTheme(): ThemeMode {
+    if (typeof window === 'undefined') return 'system';
+    const storedTheme = localStorage.getItem(themeStorageKey);
+    if (storedTheme === 'light' || storedTheme === 'dark' || storedTheme === 'system') {
+        return storedTheme;
+    }
+    const legacyDarkMode = localStorage.getItem(legacyDarkModeKey);
+    if (legacyDarkMode === 'true' || legacyDarkMode === 'false') {
+        const migrated = legacyDarkMode === 'true' ? 'dark' : 'light';
+        localStorage.setItem(themeStorageKey, migrated);
+        return migrated;
+    }
+    return 'system';
+}
+
+// Theme mode store with persistence
+export const themeMode = writable<ThemeMode>('system', (set) => {
+    if (typeof window !== 'undefined') {
+        const initialTheme = resolveInitialTheme();
+        set(initialTheme);
+        applyTheme(initialTheme);
     }
 
     return () => {};
@@ -48,13 +75,9 @@ export const darkMode = writable<boolean>(false, (set) => {
 
 // Subscribe to changes and update localStorage and document class
 if (typeof window !== 'undefined') {
-    darkMode.subscribe(isDark => {
-        localStorage.setItem('darkMode', isDark.toString());
-        if (isDark) {
-            document.documentElement.classList.add('dark');
-        } else {
-            document.documentElement.classList.remove('dark');
-        }
+    themeMode.subscribe((mode) => {
+        localStorage.setItem(themeStorageKey, mode);
+        applyTheme(mode);
     });
 }
 
@@ -74,7 +97,7 @@ export const configs = readable<Configs | null>({ room: '', configs: [] }, funct
             .catch((ex) => {
                 outstanding = false;
                 if (errors++ > 5) set(null);
-                console.log(ex);
+                console.error('Failed to fetch configs:', ex);
             });
     }, 1000);
 
@@ -99,7 +122,7 @@ export const devices = readable<Devices | null>({ room: '', devices: [] }, funct
             .catch((ex) => {
                 outstanding = false;
                 if (errors++ > 5) set(null);
-                console.log(ex);
+                console.error('Failed to fetch devices:', ex);
             });
     }, 1000);
 
@@ -153,7 +176,19 @@ export const extraSettings = writable<ExtraSettings | null>(null, function start
         })
         .catch((ex) => {
             set(null);
-            console.log(ex);
+            console.error('Failed to fetch extra settings:', ex);
+        });
+});
+
+export const hardwareSettings = writable<ExtraSettings | null>(null, function start(set) {
+    fetch("/wifi/hardware")
+        .then(d => d.json())
+        .then((r: ExtraSettings) => {
+            set(r);
+        })
+        .catch((ex) => {
+            set(null);
+            console.error('Failed to fetch hardware settings:', ex);
         });
 });
 
@@ -165,6 +200,6 @@ export const mainSettings = writable<MainSettings | null>(null, function start(s
         })
         .catch((ex) => {
             set(null);
-            console.log(ex);
+            console.error('Failed to fetch main settings:', ex);
         });
 });

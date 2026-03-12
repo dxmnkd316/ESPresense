@@ -41,19 +41,19 @@ void ConnectToWifi() {
     std::vector<String> ledControlTypes = {"MQTT", "Status", "Motion", "Count"};
 
     led_1_type = HeadlessWiFiSettings.dropdown("led_1_type", ledTypes, DEFAULT_LED1_TYPE, "LED Type");
-    led_1_pin = HeadlessWiFiSettings.integer("led_1_pin", -1, 39, DEFAULT_LED1_PIN, "Pin (-1 to disable)");
+    led_1_pin = HeadlessWiFiSettings.integer("led_1_pin", -1, 48, DEFAULT_LED1_PIN, "Pin (-1 to disable)");
     led_1_cnt = HeadlessWiFiSettings.integer("led_1_cnt", -1, 39, DEFAULT_LED1_CNT, "Count (only applies to Addressable LEDs)");
     led_1_cntrl = (ControlType)HeadlessWiFiSettings.dropdown("led_1_cntrl", ledControlTypes, DEFAULT_LED1_CNTRL, "LED Control");
     String const led_1_state = HeadlessWiFiSettings.string("led_1_state", true, "LED State");
 
     led_2_type = HeadlessWiFiSettings.dropdown("led_2_type", ledTypes, 0, "LED Type");
-    led_2_pin = HeadlessWiFiSettings.integer("led_2_pin", -1, 39, -1, "Pin (-1 to disable)");
+    led_2_pin = HeadlessWiFiSettings.integer("led_2_pin", -1, 48, -1, "Pin (-1 to disable)");
     led_2_cnt = HeadlessWiFiSettings.integer("led_2_cnt", -1, 39, 1, "Count (only applies to Addressable LEDs)");
     led_2_cntrl = (ControlType)HeadlessWiFiSettings.dropdown("led_2_cntrl", ledControlTypes, 0, "LED Control");
     String const led_2_state = HeadlessWiFiSettings.string("led_2_state", true, "LED State");
 
     led_3_type = HeadlessWiFiSettings.dropdown("led_3_type", ledTypes, 0, "LED Type");
-    led_3_pin = HeadlessWiFiSettings.integer("led_3_pin", -1, 39, -1, "Pin (-1 to disable)");
+    led_3_pin = HeadlessWiFiSettings.integer("led_3_pin", -1, 48, -1, "Pin (-1 to disable)");
     led_3_cnt = HeadlessWiFiSettings.integer("led_3_cnt", -1, 39, 1, "Count (only applies to Addressable LEDs)");
     led_3_cntrl = (ControlType)HeadlessWiFiSettings.dropdown("led_3_cntrl", ledControlTypes, 0, "LED Control");
     String const led_3_state = HeadlessWiFiSettings.string("led_3_state", true, "LED State");
@@ -99,11 +99,18 @@ void Setup() {
         led->update();
 }
 
+/**
+ * @brief Persists dirty state for MQTT-controlled LEDs to non-volatile storage.
+ *
+ * Iterates all LEDs and for each LED whose control type is MQTT and whose state is marked dirty,
+ * clears the dirty flag, logs the save action including filename and state, and writes the LED's
+ * state string to its associated state file.
+ */
 void Save() {
     for (auto& led : leds)
         if (led->getControlType() == Control_Type_MQTT && led->getDirty()) {
             led->setDirty(false);
-            Serial.printf("Saving %s: %s\r\n", led->getStateFilename().c_str(), led->getStateString().c_str());
+            Log.printf("Saving %s: %s\r\n", led->getStateFilename().c_str(), led->getStateString().c_str());
             spurt(led->getStateFilename(), led->getStateString());
         }
 }
@@ -184,13 +191,25 @@ LED* findBulb(String& command) {
     return nullptr;
 }
 
+/**
+ * @brief Apply a JSON command payload to the LED identified by command.
+ *
+ * Parses the provided JSON payload and updates the matched LED's color, brightness,
+ * white value, color temperature, effect, and on/off state when those keys are present.
+ *
+ * @param command Identifier or slug used to locate the target LED.
+ * @param pay JSON payload containing any of the supported keys: `color` (object with `r`, `g`, `b`),
+ *            `brightness`, `white_value`, `color_temp`, `effect`, and `state` (compared to MQTT_STATE_ON_PAYLOAD).
+ * @return true if a matching LED was found and the command was processed (note: returns `true` even if JSON deserialization fails);
+ *         `false` if no LED matching `command` exists.
+ */
 bool Command(String& command, String& pay) {
     auto bulb = findBulb(command);
     if (bulb == nullptr) return false;
     DynamicJsonDocument root(pay.length() + 100);
     auto err = deserializeJson(root, pay);
     if (err) {
-        Serial.printf("LEDs::Command: deserializeJson: %s\r\n", err.c_str());
+        Log.printf("LEDs::Command: deserializeJson: %s\r\n", err.c_str());
         return true;
     }
     bool sendNewState = false;
